@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>行星防禦 (飛行支援版)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Noto+Sans+TC:wght@400;700&display=swap');
+
+        body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Noto Sans TC', sans-serif; user-select: none; touch-action: none; }
+        
+        #game-container { position: relative; width: 100vw; height: 100vh; display:none; }
+        #td-canvas { display: block; width: 100%; height: 100%; }
+        
+        /* UI Styles */
+        .glass-panel { background: rgba(0, 20, 40, 0.95); border: 1px solid #00ffff; border-radius: 10px; padding: 15px; color: #fff; font-family: 'Orbitron'; box-shadow: 0 0 15px rgba(0, 255, 255, 0.3); }
+        .btn { background: linear-gradient(180deg, #2a2a2a, #111); border: 1px solid #444; color: white; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-family: 'Noto Sans TC'; margin: 2px; text-shadow: 1px 1px 0 #000; }
+        .btn:hover { background: #00ffff; color: #000; border-color: #fff; }
+        .btn-buy { border-color: #ffaa00; color: #ffaa00; }
+        .btn-danger { border-color: #ff3333; color: #ff3333; }
+        .btn-danger:hover { background: #ff3333; color: #fff; }
+        
+        #modal-overlay { position: fixed; top: 45px; left: 0; width: 100%; height: calc(100% - 45px); background: rgba(0,0,0,0.85); z-index: 2000; display: none; justify-content: center; align-items: center; backdrop-filter: blur(5px); }
+        #shop-content, #fuel-content, #stats-content, #settings-content { max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; text-align: center; }
+        
+        /* Shop */
+        .plane-card { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding: 10px; text-align: left; transition: background 0.3s; }
+        .plane-card:hover { background: rgba(255,255,255,0.05); }
+        .plane-stats { font-size: 12px; color: #aaa; margin-top: 5px; }
+        .price-tag { color: #ffaa00; font-weight: bold; font-size: 14px; }
+
+        /* Stats & Achievements */
+        .stat-row { display: flex; justify-content: space-between; border-bottom: 1px solid #333; padding: 5px 0; font-size: 14px; color: #ddd; }
+        .ach-item { border: 1px solid #444; margin-bottom: 8px; padding: 8px; border-radius: 5px; text-align: left; background: rgba(0,0,0,0.3); transition: 0.3s; }
+        .ach-item.unlocked { border-color: #00ff00; background: rgba(0, 255, 0, 0.1); }
+        .ach-title { font-weight: bold; color: #888; display: flex; justify-content: space-between; }
+        .ach-item.unlocked .ach-title { color: #00ff00; }
+        .ach-desc { font-size: 12px; color: #aaa; margin-top: 2px; }
+
+        /* Settings */
+        .setting-row { display: flex; justify-content: space-between; align-items: center; margin: 10px 0; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        input[type="checkbox"] { transform: scale(1.5); }
+        select { background: #111; color: #fff; border: 1px solid #444; padding: 5px; border-radius: 3px; }
+
+        /* Top Bar */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        #top-bar { position: absolute; top: 0; left: 0; right: 0; height: 45px; display: flex; justify-content: space-between; align-items: center; padding: 0 15px; background: rgba(0, 0, 0, 0.95); border-bottom: 2px solid #ff3333; z-index: 3000; pointer-events: auto; }
+        .stat-item { font-size: 14px; color: #fff; margin-right: 15px; font-family: 'Orbitron'; display: flex; align-items: center; }
+        .stat-val { color: #ffaa00; margin-left: 5px; font-weight: bold; }
+
+        #tower-legend { position: absolute; top: 55px; left: 10px; background: rgba(0, 0, 0, 0.8); border: 1px solid #555; border-radius: 5px; padding: 10px; pointer-events: none; z-index: 90; font-size: 12px; max-width: 180px; }
+        .legend-item { display: flex; align-items: center; margin-bottom: 5px; color: #ddd; }
+        .legend-dot { width: 12px; height: 12px; margin-right: 8px; border: 1px solid #fff; box-shadow: 0 0 5px currentColor; }
+
+        #bottom-controls { position: absolute; bottom: 0; left: 0; width: 100%; display: flex; flex-wrap: wrap; justify-content: space-around; padding-bottom: 10px; background: linear-gradient(to top, rgba(0,0,0,0.95), transparent); pointer-events: auto; z-index: 100; }
+
+        /* Flight */
+        #flight-container { display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; background: #87CEEB; z-index: 5000; }
+        #flight-hud { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 20px; font-family: 'Orbitron', monospace; color: #0f0; text-shadow: 0 0 5px #0f0; z-index: 11; background: rgba(0,0,0,0.6); padding: 10px 20px; border-radius: 10px; border: 1px solid #333; }
+        .hud-value { font-size: 18px; font-weight: bold; }
+        .gear-down { color: #0f0; } .gear-up { color: #f00; }
+        #flight-controls { position: absolute; width: 100%; height: 100%; top: 0; left: 0; pointer-events: none; z-index: 20; }
+        .control-btn { position: absolute; pointer-events: auto; background: rgba(0,0,0,0.5); border: 1px solid #fff; color: #fff; padding: 10px; border-radius: 5px; cursor: pointer; }
+        #stick-area { position: absolute; bottom: 50px; left: 30px; width: 150px; height: 150px; background: rgba(255,255,255,0.1); border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); pointer-events: auto; }
+        #stick-knob { position: absolute; top: 50%; left: 50%; width: 50px; height: 50px; background: rgba(0, 102, 204, 0.8); border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px #0066cc; }
+        #throttle-area { position: absolute; bottom: 50px; right: 30px; width: 50px; height: 200px; background: rgba(0,0,0,0.5); border: 1px solid #fff; pointer-events: auto; }
+        #throttle-bar { position: absolute; bottom: 0; left: 0; width: 100%; height: 0%; background: #ffaa00; box-shadow: 0 0 10px #ffaa00; }
+
+        #start-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 6000; display: flex; justify-content: center; align-items: center; flex-direction: column; }
+        #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #00ffff; font-family: 'Orbitron'; transition: opacity 0.5s; display:none;}
+        .big-btn { padding: 15px 40px; font-size: 24px; font-family: 'Orbitron'; background: transparent; color: #00ffff; border: 2px solid #00ffff; cursor: pointer; box-shadow: 0 0 15px #00ffff; transition: 0.3s; margin-top: 20px; }
+        .big-btn:hover { background: #00ffff; color: #000; }
+        
+        #notification { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0, 0, 0, 0.95); border: 2px solid #ff3333; padding: 20px; text-align: center; display: none; z-index: 4000; min-width: 280px; border-radius: 10px; color:#fff; box-shadow: 0 0 20px rgba(255,0,0,0.4); white-space: pre-line; }
+        #save-status { font-size: 10px; color: #0f0; margin-left: 10px; opacity: 0; transition: opacity 0.5s; }
+    </style>
+</head>
+<body>
+
+<div id="start-screen">
+    <h1 style="color:#fff; font-family:'Orbitron'; margin-bottom:10px; text-align:center; font-size:32px;">PLANET DEFENSE<br><span style="font-size:0.5em; color:#ffaa00;">TACTICAL AIR SUPPORT</span></h1>
+    <div style="color:#888; font-size:12px;">SYSTEM READY</div>
+    <button class="big-btn" onclick="startGame()">INITIALIZE</button>
+</div>
+
+<div id="loading-overlay">
+    <div style="width:50px; height:50px; border:3px solid #333; border-top:3px solid #00ffff; border-radius:50%; animation:spin 1s infinite;"></div>
+    <div style="color:#00ffff; font-size:20px; margin-top:20px;">SYSTEM LOADING...</div>
+</div>
+<style>@keyframes spin { 0% {transform:rotate(0deg);} 100% {transform:rotate(360deg);} }</style>
+
+<div id="modal-overlay">
+    <div id="shop-content" class="glass-panel" style="display:none;">
+        <h2 style="color:#00ffff; border-bottom:1px solid #00ffff; padding-bottom:10px;">AIRCRAFT HANGAR</h2>
+        <div id="plane-list"></div>
+        <button class="btn" style="width:100%; margin-top:20px;" onclick="closeModal()">CLOSE</button>
+    </div>
+    
+    <div id="fuel-content" class="glass-panel" style="display:none;">
+        <h2 style="color:#ffaa00;">⛽ REFUEL STATION</h2>
+        <p>Market Price: <span id="fuel-price" style="color:#00ff00;">$0.00</span> / L</p>
+        <div style="background:#000; padding:10px; border-radius:5px; margin:10px 0;">
+            <p>Tank Status: <span id="fuel-status" style="font-weight:bold;">0 / 0 L</span></p>
+            <div style="width:100%; height:10px; background:#333; border-radius:5px; overflow:hidden; margin-top:5px;">
+                <div id="fuel-bar-fill" style="width:0%; height:100%; background:#ffaa00;"></div>
+            </div>
+        </div>
+        <div style="margin: 20px 0;">
+            <p>Fill Cost: <span id="fill-cost" style="color:#ffaa00; font-size:1.4em;">$0</span></p>
+        </div>
+        <button class="btn btn-buy" onclick="buyFuel()">FILL TANK</button>
+        <button class="btn" onclick="closeModal()">TAKE OFF</button>
+    </div>
+
+    <div id="stats-content" class="glass-panel" style="display:none;">
+        <h2 style="color:#00ffff; border-bottom:1px solid #00ffff; padding-bottom:10px;">COMMANDER PROFILE</h2>
+        <div id="stats-body" style="margin-bottom:20px;"></div>
+        <h3 style="color:#ffaa00; text-align:left; border-bottom:1px solid #444; padding-bottom:5px;">ACHIEVEMENTS</h3>
+        <div id="achievements-body"></div>
+        <button class="btn" style="width:100%; margin-top:20px;" onclick="closeModal()">CLOSE</button>
+    </div>
+
+    <div id="settings-content" class="glass-panel" style="display:none;">
+        <h2 style="color:#00ffff; border-bottom:1px solid #00ffff; padding-bottom:10px;">SETTINGS</h2>
+        <div style="text-align:left; margin:20px 0;">
+            <h3 style="color:#ffaa00;">Graphics & Audio</h3>
+            <div class="setting-row">
+                <span>Sound Effects</span>
+                <input type="checkbox" id="sound-toggle" onchange="updateSettings()" checked>
+            </div>
+            <div class="setting-row">
+                <span>Background Music</span>
+                <input type="checkbox" id="music-toggle" onchange="updateSettings()" checked>
+            </div>
+            <div class="setting-row">
+                <span>Particles (High Perf)</span>
+                <input type="checkbox" id="particles-toggle" onchange="updateSettings()" checked>
+            </div>
+            <h3 style="color:#ffaa00; margin-top:20px;">Gameplay</h3>
+            <div class="setting-row">
+                <span>Difficulty</span>
+                <select id="difficulty-select" onchange="updateSettings()">
+                    <option value="easy">Easy (80% HP)</option>
+                    <option value="normal" selected>Normal</option>
+                    <option value="hard">Hard (120% HP)</option>
+                </select>
+            </div>
+        </div>
+        <div style="margin:20px 0; padding:15px; background:rgba(255,0,0,0.2); border:1px solid #f00; border-radius:5px;">
+            <h4 style="color:#ff3333; margin-top:0;">Danger Zone</h4>
+            <button class="btn" onclick="exportSave()">Export Save</button>
+            <button class="btn" onclick="importSave()">Import Save</button>
+            <button class="btn btn-danger" onclick="if(confirm('Reset all progress?')) { localStorage.removeItem('pd_final_save_v7'); location.reload(); }">Reset Game</button>
+        </div>
+        <button class="btn" style="width:100%; margin-top:20px;" onclick="closeModal()">CLOSE</button>
+    </div>
+</div>
+
+<div id="game-container">
+    <canvas id="td-canvas"></canvas>
+
+    <div id="ui-layer">
+        <div id="top-bar">
+            <div><span class="stat-item">WAVE: <span id="wave-display" class="stat-val">1</span></span></div>
+            <div><span class="stat-item">GOLD: <span id="gold-display" class="stat-val">600</span></span></div>
+            <div>
+                <button class="btn" onclick="openStats()">📊</button>
+                <button class="btn" onclick="openSettings()">⚙️</button>
+                <button id="shop-btn" class="btn" onclick="openShop()" style="display:none;">🛒</button>
+            </div>
+        </div>
+        <div id="tower-legend"></div>
+        <div style="position:absolute; top:50px; right:10px; color:#0f0; font-size:10px; opacity:0;" id="save-status">GAME SAVED</div>
+        <div id="bottom-controls">
+            <button class="btn" onclick="buyTower()">+ TOWER (100G)</button>
+            <button class="btn" onclick="mergeTowers()">AUTO MERGE</button>
+            <button class="btn btn-blue" id="flight-btn" onclick="enterFlightMode()" style="display:none;">✈️ COCKPIT</button>
+        </div>
+    </div>
+
+    <div id="flight-container">
+        <div id="three-container" style="width:100%; height:100%;"></div>
+        <div id="flight-hud">
+            <div><span style="color:#aaa; font-size:10px;">ALT</span><br><span id="hud-alt" class="hud-value">0</span></div>
+            <div><span style="color:#aaa; font-size:10px;">SPD</span><br><span id="hud-spd" class="hud-value">0</span></div>
+            <div><span style="color:#aaa; font-size:10px;">FUEL</span><br><span id="hud-fuel" class="hud-value">100%</span></div>
+            <div><span style="color:#aaa; font-size:10px;">GEAR</span><br><span id="hud-gear" class="hud-value gear-down">DOWN</span></div>
+        </div>
+        <div id="flight-controls">
+            <button class="control-btn" style="top: 20px; right: 20px;" onclick="exitFlightMode()">❌ EXIT</button>
+            <button class="control-btn" style="bottom: 20px; left: 50%; transform:translateX(-50%); width:80px;" onclick="toggleGear()">⚙️ GEAR</button>
+            <div id="stick-area"><div id="stick-knob"></div></div>
+            <div id="throttle-area"><div id="throttle-bar"></div></div>
+        </div>
+    </div>
+</div>
+
+<div id="notification">
+    <h3 id="notif-title" style="color:#ff3333; margin:0 0 10px 0;">ALERT</h3>
+    <p id="notif-msg" style="margin:0 0 15px 0; color:#ddd;"></p>
+    <button class="btn" onclick="closeNotification()">OK</button>
+</div>
+
+<script>
+// --- Settings & Game Data ---
+let gameSettings = { sound: true, music: true, particles: true, difficulty: 'normal' };
+let gameData = {
+    wave: 1, gold: 600, planetHP: 1000, maxPlanetHP: 1000,
+    towers: new Array(50).fill(null), enemies: [], projectiles: [], particles: [],
+    flightUnlocked: false, flightTutorialShown: false,
+    ownedPlanes: [0], currentPlaneId: 0, currentFuel: 212, isFlying: false,
+    achievements: [],
+    stats: { totalEnemiesKilled: 0, totalGoldEarned: 0, totalPlanesBought: 0, totalFlightTime: 0, highestWave: 1 }
+};
+
+// --- Music Manager ---
+const MusicManager = {
+    ctx: null, source: null, isPlaying: false,
+    init() { 
+        this.ctx = SoundManager.ctx;
+        if(this.ctx) this.loadMusic();
+    },
+    loadMusic() {
+        if(!this.ctx) return;
+        const osc1 = this.ctx.createOscillator(); osc1.type = 'sine'; osc1.frequency.value = 110;
+        const osc2 = this.ctx.createOscillator(); osc2.type = 'triangle'; osc2.frequency.value = 220;
+        const gain = this.ctx.createGain(); gain.gain.value = 0.05;
+        const filter = this.ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 600;
+        osc1.connect(filter); osc2.connect(filter); filter.connect(gain); gain.connect(this.ctx.destination);
+        this.source = { osc1, osc2, gain };
+    },
+    play() {
+        if(!gameSettings.music || !this.source || this.isPlaying) return;
+        try { this.source.osc1.start(); this.source.osc2.start(); this.isPlaying = true; } catch(e){}
+    },
+    stop() {
+        if(this.source && this.isPlaying) { this.source.gain.gain.value = 0; this.isPlaying = false; }
+    },
+    resume() {
+        if(gameSettings.music && this.source) { this.source.gain.gain.value = 0.05; this.isPlaying = true; }
+    }
+};
+
+// --- Sound Manager ---
+const SoundManager = {
+    ctx: null,
+    init() { const AC = window.AudioContext || window.webkitAudioContext; this.ctx = new AC(); },
+    play(type) {
+        if (!this.ctx || !gameSettings.sound) return;
+        const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+        osc.connect(gain); gain.connect(this.ctx.destination);
+        const t = this.ctx.currentTime;
+        if(type==='ui'){ osc.type='sine'; osc.freq(1200,t); gain.vol(0.1,t,0.1); osc.start(t); osc.stop(t+0.1); }
+        else if(type==='buy'){ osc.type='square'; osc.freq(400,t,0.1,800); gain.vol(0.1,t,0.2); osc.start(t); osc.stop(t+0.2); }
+        else if(type==='engine'){ osc.type='sawtooth'; osc.freq(50,t,1.0,100); gain.vol(0.05,t,1.0); osc.start(t); osc.stop(t+1.0); }
+        else if(type==='explosion'){ osc.type='sawtooth'; osc.freq(100,t); osc.frequency.exponentialRampToValueAtTime(10,t+0.5); gain.vol(0.3,t,0.5); osc.start(t); osc.stop(t+0.5); }
+        else if(type==='shoot'){ osc.type='square'; osc.freq(800,t); osc.frequency.exponentialRampToValueAtTime(100,t+0.1); gain.vol(0.05,t,0.1); osc.start(t); osc.stop(t+0.1); }
+        else if(type==='achievement'){ osc.type='triangle'; osc.freq(600,t,0.1,1200); gain.vol(0.2,t,0.5); osc.start(t); osc.stop(t+0.5); }
+        else if(type==='laser'){ osc.type='sawtooth'; osc.freq(800,t,0.1,400); gain.vol(0.05,t,0.1); osc.start(t); osc.stop(t+0.1); }
+    }
+};
+AudioNode.prototype.freq=function(v,t,d=0,v2){this.frequency.setValueAtTime(v,t);if(d)this.frequency.linearRampToValueAtTime(v2||v,t+d);}
+AudioNode.prototype.vol=function(v,t,d){this.gain.setValueAtTime(v,t);if(d)this.gain.exponentialRampToValueAtTime(0.001,t+d);}
+
+// --- Tutorial Manager ---
+const TutorialManager = {
+    completed: [],
+    show(id, title, content) {
+        if(this.completed.includes(id)) return;
+        showNotification(title, content);
+        this.completed.push(id);
+        localStorage.setItem('pd_tutorials', JSON.stringify(this.completed));
+    },
+    init() {
+        const saved = localStorage.getItem('pd_tutorials');
+        if(saved) this.completed = JSON.parse(saved);
+        setTimeout(() => this.show('basics', 'WELCOME COMMANDER', 'Defend the center planet.\nBuy towers (bottom left) and merge them.\nReach Wave 10 to unlock air support!'), 1000);
+    }
+};
+
+// --- Performance Manager ---
+const PerformanceManager = {
+    frameCount: 0, lastTime: 0, fps: 60,
+    update(time) {
+        this.frameCount++;
+        if(time - this.lastTime >= 1000) {
+            this.fps = this.frameCount;
+            this.frameCount = 0;
+            this.lastTime = time;
+        }
+    }
+};
+
+// --- Data Constants ---
+const AIRCRAFT_DB = [
+    { id: 0, name: "Cessna 172", price: 45000, fuel: 212, burn: 38, speedMult: 1.0 },
+    { id: 1, name: "Piper PA-28", price: 15000, fuel: 246, burn: 42, speedMult: 0.95 },
+    { id: 2, name: "Beechcraft Bonanza", price: 250000, fuel: 379, burn: 75, speedMult: 1.4 },
+    { id: 3, name: "Gulfstream G650", price: 15000000, fuel: 22153, burn: 1700, speedMult: 2.7 },
+    { id: 4, name: "Airbus A320", price: 80000000, fuel: 23859, burn: 2700, speedMult: 2.2 },
+    { id: 5, name: "Boeing 737", price: 120000000, fuel: 26035, burn: 2800, speedMult: 2.3 }
+];
+
+const TOWER_TYPES = [
+    { name: '激光塔', color: '#ff3333', desc: '紅: 單體速射', range: 150, damage: 10, rate: 20, type: 0 },
+    { name: '導彈塔', color: '#ffaa00', desc: '橙: 範圍爆炸', range: 200, damage: 30, rate: 60, type: 1, splashRadius: 30 },
+    { name: '冰凍塔', color: '#00ffff', desc: '藍: 緩速控制', range: 120, damage: 5, rate: 30, type: 2 },
+    { name: '狙擊塔', color: '#00ff00', desc: '綠: 遠距高傷', range: 300, damage: 100, rate: 120, type: 3 },
+    { name: '加農炮', color: '#8B4513', desc: '棕: 擴散濺射', range: 180, damage: 25, rate: 50, type: 4 }
+];
+
+const TOWER_UPGRADE_BONUS = [
+    { damage: 1.25, range: 1.0, rate: 0.95 }, { damage: 1.3, range: 1.02, rate: 0.98 },
+    { damage: 1.1, range: 1.1, rate: 0.9 }, { damage: 1.4, range: 1.0, rate: 1.0 },
+    { damage: 1.2, range: 1.05, rate: 0.96 }
+];
+
+const ACHIEVEMENTS = [
+    { id: 'wave10', name: '新手指揮官', desc: '到達第10波', reward: 1000 },
+    { id: 'wave50', name: '資深防禦者', desc: '到達第50波', reward: 5000 },
+    { id: 'wave100', name: '傳奇防禦者', desc: '到達第100波', reward: 25000 },
+    { id: 'first_plane', name: '飛行員', desc: '購買第一架飛機', reward: 500 },
+    { id: 'all_planes', name: '收藏家', desc: '擁有所有飛機', reward: 100000 },
+    { id: 'millionaire', name: '百萬富翁', desc: '累積獲得100萬金幣', reward: 10000 },
+    { id: 'tower_master', name: '塔防大師', desc: '擁有10級塔', reward: 5000 },
+    { id: 'ace_pilot', name: '王牌', desc: '飛行一小時', reward: 7500 },
+    { id: 'speed_demon', name: '速度惡魔', desc: '速度 > 800kts', reward: 3000 },
+    { id: 'boss_slayer', name: 'Boss殺手', desc: '擊敗10個Boss', reward: 15000 },
+    { id: 'merger', name: '合併專家', desc: '合併100次', reward: 8000 }
+];
+
+// --- Initialization ---
+function startGame() { 
+    document.getElementById('start-screen').style.display='none'; 
+    document.getElementById('loading-overlay').style.display='flex';
+    SoundManager.init(); 
+    MusicManager.init();
+    setTimeout(() => {
+        document.getElementById('loading-overlay').style.display='none';
+        document.getElementById('game-container').style.display='block'; 
+        initTD();
+        loadGame();
+        MusicManager.play();
+        TutorialManager.init();
+    }, 1500);
+}
+
+function initLegend() {
+    const el = document.getElementById('tower-legend');
+    el.innerHTML = '<div style="color:#aaa; border-bottom:1px solid #555; margin-bottom:5px; font-weight:bold;">TOWER TYPES</div>';
+    TOWER_TYPES.forEach(t => { el.innerHTML += `<div class="legend-item"><div class="legend-dot" style="background:${t.color}; box-shadow:0 0 5px ${t.color}"></div>${t.desc}</div>`; });
+}
+
+function showNotification(t,m) { 
+    document.getElementById('notif-title').innerText=t; 
+    document.getElementById('notif-msg').innerText=m; 
+    document.getElementById('notification').style.display='block'; 
+}
+function closeNotification() { document.getElementById('notification').style.display='none'; }
+
+// --- Achievement & Stats ---
+function checkAchievement(id) {
+    if (!gameData.achievements.includes(id)) {
+        const ach = ACHIEVEMENTS.find(a => a.id === id);
+        if(ach) {
+            gameData.achievements.push(id);
+            gameData.gold += ach.reward;
+            SoundManager.play('achievement');
+            showNotification("ACHIEVEMENT UNLOCKED", `${ach.name}\nReward: ${ach.reward}G`);
+            saveGame();
+        }
+    }
+}
+
+function updateStats() {
+    if (gameData.wave > gameData.stats.highestWave) gameData.stats.highestWave = gameData.wave;
+    if (gameData.wave >= 10) checkAchievement('wave10');
+    if (gameData.wave >= 50) checkAchievement('wave50');
+    if (gameData.wave >= 100) checkAchievement('wave100');
+    if (gameData.stats.totalGoldEarned >= 1000000) checkAchievement('millionaire');
+    if (gameData.ownedPlanes.length >= AIRCRAFT_DB.length) checkAchievement('all_planes');
+    const maxLvl = Math.max(...gameData.towers.map(t=>t?t.level:0));
+    if (maxLvl >= 10) checkAchievement('tower_master');
+}
+
+function openStats() {
+    SoundManager.play('ui');
+    const s = gameData.stats;
+    document.getElementById('stats-body').innerHTML = `
+        <div class="stat-row"><span>Highest Wave</span><span>${s.highestWave}</span></div>
+        <div class="stat-row"><span>Enemies Killed</span><span>${s.totalEnemiesKilled}</span></div>
+        <div class="stat-row"><span>Total Earned</span><span>${Math.floor(s.totalGoldEarned).toLocaleString()}G</span></div>
+        <div class="stat-row"><span>Flight Time</span><span>${Math.floor(s.totalFlightTime/60)} min</span></div>
+    `;
+    let achHTML = '';
+    ACHIEVEMENTS.forEach(ach => {
+        const unlocked = gameData.achievements.includes(ach.id);
+        achHTML += `<div class="ach-item ${unlocked?'unlocked':''}">
+            <div class="ach-title"><span>${ach.name}</span><span>${unlocked?'✔':'🔒'}</span></div>
+            <div class="ach-desc">${ach.desc}</div>
+        </div>`;
+    });
+    document.getElementById('achievements-body').innerHTML = achHTML;
+    document.getElementById('modal-overlay').style.display='flex';
+    document.getElementById('stats-content').style.display='block';
+    document.getElementById('shop-content').style.display='none';
+    document.getElementById('fuel-content').style.display='none';
+    document.getElementById('settings-content').style.display='none';
+}
+
+// --- Settings ---
+function openSettings() {
+    SoundManager.play('ui');
+    document.getElementById('sound-toggle').checked = gameSettings.sound;
+    document.getElementById('music-toggle').checked = gameSettings.music;
+    document.getElementById('particles-toggle').checked = gameSettings.particles;
+    document.getElementById('difficulty-select').value = gameSettings.difficulty;
+    document.getElementById('modal-overlay').style.display='flex';
+    document.getElementById('settings-content').style.display='block';
+    document.getElementById('shop-content').style.display='none';
+    document.getElementById('fuel-content').style.display='none';
+    document.getElementById('stats-content').style.display='none';
+}
+
+function updateSettings() {
+    gameSettings.sound = document.getElementById('sound-toggle').checked;
+    gameSettings.music = document.getElementById('music-toggle').checked;
+    gameSettings.particles = document.getElementById('particles-toggle').checked;
+    gameSettings.difficulty = document.getElementById('difficulty-select').value;
+    if(gameSettings.music) MusicManager.resume(); else MusicManager.stop();
+    localStorage.setItem('pd_settings', JSON.stringify(gameSettings));
+}
+
+function exportSave() { prompt("Copy your save code:", btoa(JSON.stringify(gameData))); }
+function importSave() {
+    let code = prompt("Paste save code:");
+    if(code) {
+        try { gameData = JSON.parse(atob(code)); saveGame(); location.reload(); } catch(e) { alert("Invalid code"); }
+    }
+}
+
+// --- Modals ---
+function closeModal() { document.getElementById('modal-overlay').style.display = 'none'; }
+function openShop() {
+    SoundManager.play('ui');
+    const list = document.getElementById('plane-list'); list.innerHTML = '';
+    AIRCRAFT_DB.forEach(p => {
+        const owned = gameData.ownedPlanes.includes(p.id);
+        const equipped = gameData.currentPlaneId === p.id;
+        let html = `<div class="plane-card">
+            <div><div style="color:${equipped?'#00ff00':'#fff'};font-weight:bold;">${p.name}</div>
+            <div class="plane-stats">⛽ ${p.fuel}L | 🚀 x${p.speedMult}</div>
+            ${!owned ? `<div class="price-tag">$${p.price.toLocaleString()}</div>` : ''}</div>
+            <button class="${owned?'btn':'btn btn-buy'}" onclick="${owned?`equipPlane(${p.id})`:`buyPlane(${p.id})`}" ${equipped?'disabled':''}>${equipped?'READY':(owned?'SELECT':'BUY')}</button>
+        </div>`;
+        list.innerHTML += html;
+    });
+    document.getElementById('modal-overlay').style.display = 'flex';
+    document.getElementById('shop-content').style.display = 'block';
+    document.getElementById('fuel-content').style.display = 'none';
+    document.getElementById('stats-content').style.display = 'none';
+    document.getElementById('settings-content').style.display = 'none';
+}
+
+function buyPlane(id) {
+    const p = AIRCRAFT_DB.find(x => x.id === id);
+    if (gameData.gold >= p.price) {
+        gameData.gold -= p.price;
+        gameData.ownedPlanes.push(id);
+        gameData.stats.totalPlanesBought++;
+        checkAchievement('first_plane');
+        SoundManager.play('buy');
+        openShop();
+    } else showNotification("FUNDS INSUFFICIENT", `Need $${(p.price - gameData.gold).toLocaleString()} more.`);
+    updateUI();
+}
+
+function equipPlane(id) {
+    gameData.currentPlaneId = id;
+    const p = AIRCRAFT_DB.find(x => x.id === id);
+    gameData.currentFuel = p.fuel;
+    showNotification("AIRCRAFT SELECTED", `${p.name} ready.`);
+    openShop();
+    updateUI();
+}
+
+let currentFuelPrice = 0;
+function triggerRefuel() {
+    currentFuelPrice = (Math.random() * 4.5 + 3.5).toFixed(2);
+    const p = AIRCRAFT_DB.find(x => x.id === gameData.currentPlaneId);
+    const cost = Math.floor((p.fuel - gameData.currentFuel) * currentFuelPrice);
+    document.getElementById('fuel-price').innerText = `$${currentFuelPrice}`;
+    document.getElementById('fuel-status').innerText = `${Math.floor(gameData.currentFuel)} / ${p.fuel} L`;
+    document.getElementById('fuel-bar-fill').style.width = `${(gameData.currentFuel/p.fuel)*100}%`;
+    document.getElementById('fill-cost').innerText = `$${cost.toLocaleString()}`;
+    document.getElementById('modal-overlay').style.display = 'flex';
+    document.getElementById('fuel-content').style.display = 'block';
+    document.getElementById('shop-content').style.display = 'none';
+    document.getElementById('stats-content').style.display = 'none';
+    document.getElementById('settings-content').style.display = 'none';
+}
+
+function buyFuel() {
+    const p = AIRCRAFT_DB.find(x => x.id === gameData.currentPlaneId);
+    const cost = Math.floor((p.fuel - gameData.currentFuel) * currentFuelPrice);
+    if (p.fuel - gameData.currentFuel <= 0) return;
+    if (gameData.gold >= cost) {
+        gameData.gold -= cost; gameData.currentFuel = p.fuel;
+        SoundManager.play('buy');
+        document.getElementById('fuel-status').innerText = `${p.fuel} / ${p.fuel} L`;
+        document.getElementById('fill-cost').innerText = "$0";
+        document.getElementById('fuel-bar-fill').style.width = "100%";
+    } else {
+        const amt = Math.floor(gameData.gold / currentFuelPrice);
+        if(amt > 0) { gameData.gold -= Math.floor(amt * currentFuelPrice); gameData.currentFuel += amt; SoundManager.play('buy'); triggerRefuel(); }
+    }
+    updateUI();
+}
+
+// --- Tower Defense Core ---
+const TD_CANVAS = document.getElementById('td-canvas');
+const TD_CTX = TD_CANVAS.getContext('2d');
+let viewport = { cx: 0, cy: 0 };
+
+function initTD() { window.addEventListener('resize', resizeTD); resizeTD(); initLegend(); setInterval(saveGame, 30000); requestAnimationFrame(gameLoop); }
+function resizeTD() { TD_CANVAS.width = window.innerWidth; TD_CANVAS.height = window.innerHeight; viewport.cx = TD_CANVAS.width/2; viewport.cy = TD_CANVAS.height/2; }
+
+function gameLoop(time) { 
+    if(!gameData.isFlying){ updateTD(); drawTD(); } 
+    PerformanceManager.update(time);
+    requestAnimationFrame(gameLoop); 
+}
+
+function updateTD() {
+    if(Math.random() < 0.02 + (gameData.wave*0.001)) spawnEnemy();
+    for(let i=gameData.enemies.length-1; i>=0; i--){
+        let e=gameData.enemies[i], dx=viewport.cx-e.x, dy=viewport.cy-e.y;
+        if(Math.sqrt(dx*dx+dy*dy)<50) { 
+            gameData.planetHP-=10; createExplosion(e.x, e.y, '#ff3333'); gameData.enemies.splice(i,1); 
+            if(gameData.planetHP<=0) handleDeath(); 
+        } else { 
+            let speed = e.speed;
+            if(e.freezeDuration > 0) { speed *= 0.5; e.freezeDuration--; }
+            let a=Math.atan2(dy,dx); e.x+=Math.cos(a)*speed; e.y+=Math.sin(a)*speed; 
+        }
+    }
+    gameData.towers.forEach((t, idx)=>{
+        if(!t)return; t.cooldown--;
+        if(t.cooldown<=0){
+            let len = gameData.towers.length, angle = (idx / len) * Math.PI * 2;
+            let tx = viewport.cx + Math.cos(angle)*100, ty = viewport.cy + Math.sin(angle)*100;
+            let target = gameData.enemies.find(e=>Math.hypot(e.x-tx,e.y-ty)<t.stats.range);
+            if(target){ 
+                let p = { x:tx, y:ty, target:target, damage:t.stats.damage, color:t.stats.color, towerType: t.type };
+                if(t.stats.pierce) p.pierce=true; if(t.stats.splashRadius) p.splashRadius=t.stats.splashRadius;
+                if(t.stats.freezeDuration) p.freezeDuration=t.stats.freezeDuration; if(t.stats.armorPierce) p.armorPierce=true;
+                gameData.projectiles.push(p); t.cooldown=t.stats.rate; 
+                if(Math.random()<0.3) SoundManager.play(t.type===0?'laser':'shoot'); 
+            }
+        }
+    });
+    for(let i=gameData.projectiles.length-1;i>=0;i--){
+        let p=gameData.projectiles[i]; 
+        if(!gameData.enemies.includes(p.target) && !p.pierce){ gameData.projectiles.splice(i,1); continue; }
+        let tx = p.target ? p.target.x : p.x + Math.cos(0)*10, ty = p.target ? p.target.y : p.y + Math.sin(0)*10;
+        if(Math.hypot(tx-p.x, ty-p.y)<10){ 
+            let hits = [];
+            if(p.splashRadius) hits = gameData.enemies.filter(e => Math.hypot(e.x-p.x, e.y-p.y) <= p.splashRadius);
+            else if(gameData.enemies.includes(p.target)) hits = [p.target];
+            hits.forEach(e => { e.hp -= p.damage; if(p.freezeDuration) e.freezeDuration=p.freezeDuration; if(e.hp<=0) killEnemy(e); });
+            if(!p.pierce) gameData.projectiles.splice(i,1); 
+        } else { let a=Math.atan2(ty-p.y, tx-p.x); p.x+=Math.cos(a)*15; p.y+=Math.sin(a)*15; }
+    }
+    updateParticles();
+    if(Math.random()<0.001){ 
+        gameData.wave++; updateStats();
+        if(gameData.wave === 3 && !TutorialManager.completed.includes('merging')) TutorialManager.show('merging', 'TOWER MERGING', 'Use AUTO MERGE to upgrade towers!');
+        if(gameData.wave === 10 && !gameData.flightUnlocked) {
+            gameData.flightUnlocked = true;
+            document.getElementById('flight-btn').style.display = 'block';
+            document.getElementById('shop-btn').style.display = 'block';
+            showNotification("UNLOCKED", "Flight Hangar Open!");
+            saveGame();
+        }
+    }
+    updateUI();
+}
+
+function updateUI() {
+    document.getElementById('wave-display').innerText = gameData.wave;
+    document.getElementById('gold-display').innerText = Math.floor(gameData.gold).toLocaleString();
+}
+
+function spawnEnemy(){ 
+    let a=Math.random()*Math.PI*2, d=Math.max(viewport.cx,viewport.cy)+50;
+    // Difficulty Multiplier
+    let diffMult = gameSettings.difficulty === 'hard' ? 1.2 : (gameSettings.difficulty === 'easy' ? 0.8 : 1.0);
+    let hp=30*Math.pow(1.5, gameData.wave-1) * diffMult; 
+    let isBoss = gameData.wave % 10 === 0 && Math.random() < 0.2; if(isBoss) hp *= 10;
+    gameData.enemies.push({ x:viewport.cx+Math.cos(a)*d, y:viewport.cy+Math.sin(a)*d, hp:hp, maxHp:hp, speed:isBoss?0.8:1.5, isBoss:isBoss, freezeDuration:0 }); 
+}
+
+function killEnemy(e){ 
+    let reward = 50 * Math.pow(1.5, gameData.wave - 1);
+    if(e.isBoss) { reward *= 5; checkAchievement('boss_slayer'); }
+    gameData.gold += Math.floor(reward);
+    gameData.stats.totalEnemiesKilled++; gameData.stats.totalGoldEarned+=Math.floor(reward);
+    createExplosion(e.x, e.y, e.isBoss?'#f0f':'#ffa500');
+    let i=gameData.enemies.indexOf(e); if(i>-1)gameData.enemies.splice(i,1);
+}
+
+function buyTower() {
+    if(gameData.gold < 100) return;
+    let empties = gameData.towers.map((t,i)=>t?null:i).filter(i=>i!==null);
+    if(empties.length===0) { gameData.towers = gameData.towers.concat(new Array(50).fill(null)); empties = gameData.towers.map((t,i)=>t?null:i).filter(i=>i!==null); }
+    gameData.gold -= 100;
+    let idx = empties[Math.floor(Math.random()*empties.length)];
+    let type = TOWER_TYPES[Math.floor(Math.random()*TOWER_TYPES.length)];
+    gameData.towers[idx] = {level:1, type:type.type, stats:{...type}, cooldown:0};
+    SoundManager.play('ui');
+}
+
+function mergeTowers() {
+    let m=false, len=gameData.towers.length;
+    for(let i=0;i<len;i++){
+        if(!gameData.towers[i])continue;
+        for(let j=i+1;j<len;j++){
+            let t1=gameData.towers[i], t2=gameData.towers[j];
+            if(t2 && t1.type===t2.type && t1.level===t2.level){
+                t1.level++;
+                const bonus = TOWER_UPGRADE_BONUS[t1.type];
+                t1.stats.damage *= bonus.damage; t1.stats.range *= bonus.range; t1.stats.rate = Math.max(5, t1.stats.rate * bonus.rate);
+                checkSpecialAbility(t1);
+                gameData.towers[j]=null; m=true; checkAchievement('merger'); break;
+            }
+        } if(m)break;
+    }
+    if(m)SoundManager.play('ui');
+}
+
+function checkSpecialAbility(t) {
+    if(t.level >= 3) {
+        if(t.type===0) t.stats.pierce=true; else if(t.type===1) t.stats.splashRadius=(t.stats.splashRadius||30)*1.5;
+        else if(t.type===2) t.stats.freezeDuration=60; else if(t.type===3) t.stats.armorPierce=true; else if(t.type===4) t.stats.bounce=2;
+    }
+}
+
+function handleDeath() {
+    gameData.planetHP = 1000; gameData.wave = 1; gameData.gold = Math.floor(gameData.gold * 0.8); gameData.enemies = []; gameData.projectiles = [];
+    let c=[]; gameData.towers.forEach((t,i)=>{if(t&&t.level>=2)c.push(i)}); c.sort(()=>Math.random()-0.5);
+    for(let i=0;i<Math.min(5,c.length);i++){ 
+        let t = gameData.towers[c[i]]; t.level--; 
+        const b = TOWER_UPGRADE_BONUS[t.type];
+        t.stats.damage /= b.damage; t.stats.range /= b.range; t.stats.rate /= b.rate;
+        if(t.level<3) { delete t.stats.pierce; delete t.stats.splashRadius; delete t.stats.freezeDuration; delete t.stats.armorPierce; delete t.stats.bounce; }
+    }
+    saveGame();
+    showNotification("MISSION FAILED", "Timeline reset to Wave 1.\nGold retained: 80%.\n5 Towers downgraded.");
+}
+
+function saveGame() { localStorage.setItem('pd_final_save_v7', JSON.stringify(gameData)); let s=document.getElementById('save-status'); s.style.opacity=1; setTimeout(()=>s.style.opacity=0, 2000); }
+function loadGame() {
+    try {
+        const s = localStorage.getItem('pd_settings'); if(s) gameSettings = JSON.parse(s);
+        let d = localStorage.getItem('pd_final_save_v7');
+        if(d) {
+            let loaded = JSON.parse(d);
+            const defs = { wave: 1, gold: 600, planetHP: 1000, maxPlanetHP: 1000, towers: new Array(50).fill(null), ownedPlanes: [0], currentPlaneId: 0, currentFuel: 212, flightUnlocked: false, flightTutorialShown: false, achievements: [], stats: { totalEnemiesKilled: 0, totalGoldEarned: 0, totalPlanesBought: 0, totalFlightTime: 0, highestWave: 1 } };
+            gameData = {...defs, ...loaded};
+            if(loaded.stats) gameData.stats = {...defs.stats, ...loaded.stats};
+            if(!Array.isArray(gameData.towers)) gameData.towers = new Array(50).fill(null);
+            if(gameData.flightUnlocked) { document.getElementById('flight-btn').style.display='block'; document.getElementById('shop-btn').style.display='block'; }
+        }
+    } catch(e) {}
+}
+
+function createExplosion(x,y,c){
+    SoundManager.play('explosion');
+    if(!gameSettings.particles) return;
+    for(let i=0;i<10;i++) gameData.particles.push({x:x,y:y,vx:(Math.random()-0.5)*5,vy:(Math.random()-0.5)*5,life:20,color:c});
+}
+function updateParticles(){
+    for(let i=gameData.particles.length-1;i>=0;i--){
+        let p=gameData.particles[i]; p.x+=p.vx; p.y+=p.vy; p.life--;
+        if(p.life<=0)gameData.particles.splice(i,1);
+    }
+}
+
+function drawTD() {
+    TD_CTX.fillStyle='#050505'; TD_CTX.fillRect(0,0,TD_CANVAS.width,TD_CANVAS.height);
+    TD_CTX.beginPath(); TD_CTX.arc(viewport.cx,viewport.cy,50,0,Math.PI*2); TD_CTX.fillStyle=`rgba(0,100,255,${gameData.planetHP/gameData.maxPlanetHP})`; TD_CTX.fill(); TD_CTX.strokeStyle='#0066cc'; TD_CTX.stroke();
+    TD_CTX.beginPath(); TD_CTX.arc(viewport.cx,viewport.cy,100,0,Math.PI*2); TD_CTX.strokeStyle='#333'; TD_CTX.stroke();
+    let len=gameData.towers.length;
+    gameData.towers.forEach((t,i)=>{
+        let a=(i/len)*Math.PI*2, x=viewport.cx+Math.cos(a)*100, y=viewport.cy+Math.sin(a)*100;
+        TD_CTX.fillStyle='#222'; TD_CTX.beginPath(); TD_CTX.arc(x,y,6,0,Math.PI*2); TD_CTX.fill();
+        if(t){ 
+            let s = Math.min(6 + t.level, 25);
+            TD_CTX.fillStyle=t.stats.color; 
+            if(t.stats.pierce) { TD_CTX.shadowColor = t.stats.color; TD_CTX.shadowBlur = 10; }
+            if(t.stats.splashRadius) { TD_CTX.beginPath(); TD_CTX.arc(x, y, t.stats.splashRadius*(t.stats.range/200), 0, Math.PI*2); TD_CTX.strokeStyle = 'rgba(255,170,0,0.2)'; TD_CTX.stroke(); }
+            TD_CTX.fillRect(x-s/2, y-s/2, s, s); TD_CTX.fillStyle='#fff'; TD_CTX.font='10px Arial'; TD_CTX.fillText(t.level,x-3,y+3); TD_CTX.shadowBlur = 0;
+        }
+    });
+    gameData.enemies.forEach(e=>{ TD_CTX.fillStyle = e.freezeDuration > 0 ? '#0ff' : (e.isBoss?'#f0f':'#f33'); TD_CTX.beginPath(); TD_CTX.arc(e.x,e.y,e.isBoss?12:6,0,Math.PI*2); TD_CTX.fill(); });
+    gameData.projectiles.forEach(p=>{ TD_CTX.fillStyle='#ff0'; TD_CTX.beginPath(); TD_CTX.arc(p.x,p.y,3,0,Math.PI*2); TD_CTX.fill(); });
+    if(gameSettings.particles) gameData.particles.forEach(p=>{ TD_CTX.fillStyle=p.color; TD_CTX.globalAlpha=p.life/20; TD_CTX.fillRect(p.x,p.y,3,3); TD_CTX.globalAlpha=1; });
+}
+
+// --- 3D Flight ---
+let scene, camera, renderer, airports=[], flightInput={pitch:0,roll:0,throttle:0}, physics={speed:0,alt:0,gear:true,x:0,z:0,heading:0,vSpeed:0,landed:false}, planeMesh;
+
+function enterFlightMode() {
+    SoundManager.play('engine'); gameData.isFlying = true;
+    document.getElementById('ui-layer').style.display='none'; document.getElementById('flight-container').style.display='block';
+    if(!scene) initFlightSim();
+    physics.speed = 0; physics.alt = 10; physics.gear = true; physics.landed = true; physics.x = airports[0].x; physics.z = airports[0].z;
+    triggerRefuel(); showFlightTutorial();
+}
+function exitFlightMode() { gameData.isFlying=false; document.getElementById('flight-container').style.display='none'; document.getElementById('ui-layer').style.display='block'; closeModal(); }
+function showFlightTutorial() {
+    if(!gameData.flightTutorialShown) { showNotification("FLIGHT CONTROLS", "Left: Joystick\nRight: Throttle\nBottom: Gear\nFly near enemies to attack!"); gameData.flightTutorialShown = true; saveGame(); }
+}
+
+function initFlightSim() {
+    const c=document.getElementById('three-container');
+    scene=new THREE.Scene(); scene.background=new THREE.Color(0x87CEEB); scene.fog=new THREE.Fog(0x87CEEB,1000,8000);
+    camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,10000);
+    renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setSize(window.innerWidth,window.innerHeight); c.appendChild(renderer.domElement);
+    const al=new THREE.AmbientLight(0xffffff,0.6); scene.add(al); const dl=new THREE.DirectionalLight(0xffffff,0.8); dl.position.set(100,500,100); scene.add(dl);
+    const g=new THREE.PlaneGeometry(10000,10000,32,32); const gm=new THREE.MeshLambertMaterial({color:0x228B22}); const gr=new THREE.Mesh(g,gm); gr.rotation.x=-Math.PI/2; scene.add(gr);
+    const w=new THREE.Mesh(new THREE.PlaneGeometry(10000,10000),new THREE.MeshBasicMaterial({color:0x1E90FF,transparent:true,opacity:0.8})); w.rotation.x=-Math.PI/2; w.position.y=-5; scene.add(w);
+    for(let i=0;i<8;i++){
+        let ax=(Math.random()-0.5)*6000, az=(Math.random()-0.5)*6000;
+        let rw=new THREE.Mesh(new THREE.PlaneGeometry(120,1500),new THREE.MeshBasicMaterial({color:0x333})); rw.rotation.x=-Math.PI/2; rw.position.set(ax,2,az); scene.add(rw);
+        airports.push({x:ax,z:az});
+        let tw=new THREE.Mesh(new THREE.BoxGeometry(30,80,30),new THREE.MeshNormalMaterial()); tw.position.set(ax+100,40,az); scene.add(tw);
+    }
+    const tg=new THREE.ConeGeometry(10,30,8); const tm=new THREE.MeshLambertMaterial({color:0x006400});
+    for(let i=0;i<500;i++){ let t=new THREE.Mesh(tg,tm); t.position.set((Math.random()-0.5)*8000,15,(Math.random()-0.5)*8000); scene.add(t); }
+    
+    // Plane Mesh (Simple Representation for God View)
+    const fus=new THREE.Mesh(new THREE.BoxGeometry(2,2,10),new THREE.MeshNormalMaterial());
+    const wing=new THREE.Mesh(new THREE.BoxGeometry(12,0.5,3),new THREE.MeshNormalMaterial());
+    const tail=new THREE.Mesh(new THREE.BoxGeometry(4,0.5,2),new THREE.MeshNormalMaterial()); tail.position.set(0,0,-4);
+    planeMesh=new THREE.Group(); planeMesh.add(fus); planeMesh.add(wing); planeMesh.add(tail); scene.add(planeMesh);
+
+    animateFlight();
+}
+
+function toggleGear(){ physics.gear=!physics.gear; document.getElementById('hud-gear').innerText=physics.gear?"DOWN":"UP"; document.getElementById('hud-gear').className=physics.gear?"hud-value gear-down":"hud-value gear-up"; SoundManager.play('ui'); }
+
+function animateFlight() {
+    if(!gameData.isFlying) return;
+    const pStats = AIRCRAFT_DB.find(x => x.id === gameData.currentPlaneId);
+    let maxSpeed = 30 * pStats.speedMult; 
+    let targetSpd = flightInput.throttle * maxSpeed;
+    if(physics.gear) targetSpd *= 0.6; if(gameData.currentFuel <= 0) targetSpd = 0;
+    physics.speed += (targetSpd - physics.speed) * 0.01;
+    
+    if(physics.speed > 1) gameData.stats.totalFlightTime += 1/60;
+    if(physics.speed * 30 > 800) checkAchievement('speed_demon');
+
+    if(flightInput.throttle > 0 && gameData.currentFuel > 0) {
+        let burn = (pStats.burn / 3600 / 60) * 10 * (0.5 + flightInput.throttle * 0.5);
+        gameData.currentFuel -= burn; if(gameData.currentFuel < 0) gameData.currentFuel = 0;
+    }
+
+    let lift = physics.speed * 0.8, pitchF = Math.sin(flightInput.pitch) * physics.speed * 2;
+    physics.vSpeed = (lift - 5.0) * 0.1 + pitchF; physics.alt += physics.vSpeed;
+
+    if(physics.alt <= 10) {
+        physics.alt = 10;
+        if(physics.speed < 5 && physics.gear && !physics.landed) { physics.landed = true; SoundManager.play('ui'); triggerRefuel(); }
+        if(physics.speed > 10) physics.landed = false;
+        if(physics.speed > 8 && !physics.landed) { SoundManager.play('explosion'); alert("CRASHED!"); physics.speed=0; }
+    }
+
+    physics.heading -= flightInput.roll * 0.03;
+    physics.x -= Math.sin(physics.heading)*physics.speed*5; physics.z -= Math.cos(physics.heading)*physics.speed*5;
+    
+    // Update Mesh & Camera (God View)
+    planeMesh.position.set(physics.x, physics.alt, physics.z);
+    planeMesh.rotation.set(flightInput.pitch, physics.heading + Math.PI, -flightInput.roll);
+    
+    const camDist = 30; const camHeight = 15;
+    const cx = physics.x - Math.sin(physics.heading) * -camDist;
+    const cz = physics.z - Math.cos(physics.heading) * -camDist;
+    camera.position.set(cx, physics.alt + camHeight, cz);
+    camera.lookAt(physics.x, physics.alt, physics.z);
+
+    document.getElementById('hud-alt').innerText = Math.floor(physics.alt);
+    document.getElementById('hud-spd').innerText = Math.floor(physics.speed * 10);
+    document.getElementById('hud-fuel').innerText = Math.floor(gameData.currentFuel) + " L";
+    renderer.render(scene, camera);
+    requestAnimationFrame(animateFlight);
+}
+
+// Input Handling
+const stick = document.getElementById('stick-area');
+const throttle = document.getElementById('throttle-area');
+let stickActive = false;
+
+function updateStick(point) {
+    let r = stick.getBoundingClientRect();
+    let cx = r.left + r.width/2, cy = r.top + r.height/2;
+    let dx = point.clientX - cx, dy = point.clientY - cy;
+    let dist = Math.min(Math.hypot(dx, dy), 50);
+    let angle = Math.atan2(dy, dx);
+    let kx = Math.cos(angle) * dist, ky = Math.sin(angle) * dist;
+    document.getElementById('stick-knob').style.transform = `translate(calc(-50% + ${kx}px), calc(-50% + ${ky}px))`;
+    flightInput.roll = kx / 50; flightInput.pitch = ky / 50;
+}
+
+stick.addEventListener('touchstart', e=>{ e.preventDefault(); stickActive=true; updateStick(e.touches[0]); }, {passive:false});
+stick.addEventListener('touchmove', e=>{ if(!stickActive)return; e.preventDefault(); updateStick(e.touches[0]); }, {passive:false});
+stick.addEventListener('touchend', ()=>{ stickActive=false; document.getElementById('stick-knob').style.transform = `translate(-50%, -50%)`; flightInput.roll=0; flightInput.pitch=0; });
+stick.addEventListener('mousedown', e=>{ stickActive=true; updateStick(e); });
+window.addEventListener('mousemove', e=>{ if(stickActive) updateStick(e); });
+window.addEventListener('mouseup', ()=>{ if(stickActive) { stickActive=false; document.getElementById('stick-knob').style.transform = `translate(-50%, -50%)`; flightInput.roll=0; flightInput.pitch=0; } });
+throttle.addEventListener('touchmove', e=>{ e.preventDefault(); let t=e.touches[0]; let r=throttle.getBoundingClientRect(); let v=1-(t.clientY-r.top)/r.height; if(v<0)v=0;if(v>1)v=1; flightInput.throttle=v; document.getElementById('throttle-bar').style.height=(v*100)+'%'; });
+</script>
+</body>
+</html>
