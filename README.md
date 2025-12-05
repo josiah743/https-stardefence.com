@@ -1,2 +1,2 @@
-# https-stardefence.com
+stardefence
 About star defence and plane
